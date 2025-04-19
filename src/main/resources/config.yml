@@ -1,0 +1,9 @@
+mysql:
+  host: "localhost"
+  port: "3306"
+  user: "root"
+  pass: ""
+  db: "mreversi_data"
+
+system: false
+prefix: "§c§l[Man10Reversi] "

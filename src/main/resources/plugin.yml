@@ -1,0 +1,17 @@
+name: Man10Reversi
+version: '1.0'
+main: yusama125718.man10Reversi.Man10Reversi
+api-version: '1.20'
+
+commands:
+  mreversi:
+    description: Man10Reversi
+    usage: /mreversi helpでコマンドを確認
+
+permissions:
+  mreversi.op:
+    default: op
+  mreversi.p:
+    default: true
+  mreversi.open:
+    default: op
