@@ -7,3 +7,9 @@ mysql:
 
 system: false
 prefix: "§c§l[Man10Reversi] "
+board_material: "SMOOTH_STONE"
+recruitment:
+  time: 120
+  messageInterval: 20
+game:
+  maxThinking: 30

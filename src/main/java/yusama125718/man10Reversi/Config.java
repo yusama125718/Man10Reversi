@@ -2,6 +2,7 @@ package yusama125718.man10Reversi;
 
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
@@ -16,11 +17,21 @@ public class Config {
     public static String prefix = "";
     public static File configfile;
     public static boolean system;
+    public static Material borad_material;
+    public static int recruitment_time;
+    public static int recruitment_interval;
+    public static int max_thinking;
 
     public static void LoadConfig(){
         mreversi.saveDefaultConfig();
         system = mreversi.getConfig().getBoolean("system");
         prefix = mreversi.getConfig().getString("prefix");
+        String str = mreversi.getConfig().getString("board_material");
+        if (str != null) borad_material = Material.getMaterial(str);
+        if (borad_material == null || borad_material.equals(Material.AIR)) borad_material = Material.SMOOTH_STONE;
+        recruitment_time = mreversi.getConfig().getInt("recruitment.time");
+        recruitment_interval = mreversi.getConfig().getInt("recruitment.messageInterval");
+        max_thinking = mreversi.getConfig().getInt("game.maxThinking");
         InitFolder();
         LoadBoards();
     }
@@ -48,7 +59,7 @@ public class Config {
             if (f.isDirectory()) continue;
             YamlConfiguration yaml = YamlConfiguration.loadConfiguration(f);
             if (yaml.get("name") == null || yaml.get("world") == null || yaml.get("x1") == null  || yaml.get("z1") == null || yaml.get("x2") == null || yaml.get("z2") == null  || yaml.get("y") == null) continue;
-            BoardManager.Board b = new BoardManager.Board(yaml.getString("name"), yaml.getString("world"), yaml.getDouble("x1"), yaml.getDouble("z1"), yaml.getDouble("z1"), yaml.getDouble("z2"), yaml.getDouble("y"));
+            BoardManager.Board b = new BoardManager.Board(yaml.getString("name"), yaml.getString("world"), yaml.getInt("x1"), yaml.getInt("z1"), yaml.getInt("x2"), yaml.getInt("z2"), yaml.getInt("y"));
             BoardManager.boards.put(yaml.getString("name"), b);
         }
     }
