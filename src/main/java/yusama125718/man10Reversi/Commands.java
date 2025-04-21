@@ -113,6 +113,15 @@ public class Commands implements @Nullable CommandExecutor, TabCompleter {
                     sender.sendMessage(boards_str.toString());
                     return true;
                 }
+                else if (args[0].equals("end") && sender.hasPermission("mreversi.op")){
+                    if (!games.containsKey(args[1])){
+                        sender.sendMessage(Config.prefix + "§rそのボードはゲーム中ではありません");
+                        return true;
+                    }
+                    games.get(args[1]).ForceEnd();
+                    sender.sendMessage(Config.prefix + "§r終了しました");
+                    return true;
+                }
                 break;
 
             case 3:

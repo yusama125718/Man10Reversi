@@ -1,9 +1,7 @@
 package yusama125718.man10Reversi;
 
 import net.kyori.adventure.text.Component;
-import org.bukkit.Bukkit;
-import org.bukkit.Material;
-import org.bukkit.World;
+import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.Skull;
@@ -11,6 +9,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,6 +35,7 @@ public class GameManager {
     public int[][] grid = new int[8][8];
     public List<int[]> placeable = new ArrayList<>();
     public BossBarTimer timer;
+    public Ability ability;
     // 挟めるか確認する時のオフセット
     private static final List<int[]> search_offsets = List.of(
         new int[]{1, 0},
@@ -47,6 +47,22 @@ public class GameManager {
         new int[]{0, -1},
         new int[]{1, -1}
     );
+    private int p1_color;
+    private int p2_color;
+    private enum Ability{
+        None("効果なし"),
+        Creeper("クリーパー");
+
+        private final String label;
+
+        Ability(String label) {
+            this.label = label;
+        }
+
+        public String getLabel() {
+            return label;
+        }
+    }
 
     public enum GameState{
         RECRUITMENT,
@@ -86,16 +102,13 @@ public class GameManager {
             }
         }
         // 盤面初期化
-        for (int row = 0; row < 8; row++) {
-            for (int column = 0; column < 8; column++) {
-                grid[row][column] = 0;
-            }
-        }
+        InitBoard();
         grid[3][3] = 1;
         grid[4][3] = 2;
         grid[3][4] = 2;
         grid[4][4] = 1;
         UpdateBoard();
+        ability = Ability.None;
         // メッセージ送信
         Player p1_p = Bukkit.getPlayer(p1);
         Player p2_p = Bukkit.getPlayer(p2);
@@ -110,11 +123,15 @@ public class GameManager {
         if (rand.nextInt(2) == 0) {
             firstIs1 = true;
             turnIs1 = true;
+            p1_color = 1;
+            p2_color = 2;
             first = "§c§l" + p1_p.getName() + "§r";
             second = "§9§l" + p2_p.getName() + "§r";
         } else {
             firstIs1 = false;
             turnIs1 = false;
+            p1_color = 2;
+            p2_color = 1;
             first = "§9§l" + p2_p.getName() + "§r";
             second = "§c§l" + p1_p.getName() + "§r";
         }
@@ -168,6 +185,14 @@ public class GameManager {
             games.remove(board.name);
         });
         executor.shutdown();
+    }
+
+    public void InitBoard(){
+        for (int row = 0; row < 8; row++) {
+            for (int column = 0; column < 8; column++) {
+                grid[row][column] = 0;
+            }
+        }
     }
 
     public void Place(Block b, Player p){
@@ -247,7 +272,12 @@ public class GameManager {
             timer.Restart(Config.max_thinking, current_name + "のターン", placeable, new int[]{ x, z });
             turnIs1 = !turnIs1;
             UpdatePlaceable();
+            if (placeable.isEmpty()){
+                SendMessage(Config.prefix + "§r" + current_name + "は置ける場所がないのでゲームを終了します");
+                GameEnd();
+            }
         }
+        ability = Ability.None;
     }
 
     public void UpdateCount(){
@@ -272,32 +302,38 @@ public class GameManager {
     public void UpdateBoard(){
         for (int row = 0; row < 8; row++){
             for (int column = 0; column < 8; column++){
-                if (grid[row][column] == 0) continue;
                 ItemStack stone = white_head;
                 if (grid[row][column] == 1) stone = black_head;
+                else if (grid[row][column] == 0) stone = new ItemStack(Material.AIR);
                 World world = Bukkit.getWorld(board.world);
                 if (world == null) {
                     SendMessage(Config.prefix + "§rワールドが見つからなかった為強制終了します。");
                     ForceEnd();
                     return;
                 }
-                int offset_x = row;
-                if (board.x1 > board.x2) offset_x -= 8;
-                int offset_z = column;
-                if (board.z1 > board.z2) offset_z -= 8;
-                Block block = world.getBlockAt(board.x1 + offset_x, board.y + 1, board.z1 + offset_z);
-                block.setType(Material.PLAYER_HEAD);
+                PlaceHead(row, column, world, stone);
+            }
+        }
+    }
 
-                // BlockStateとして取得
-                BlockState state = block.getState();
-                if (state instanceof Skull skull) {
-                    // アイテムのメタ情報をスカルにコピー（スキンやUUID）
-                    ItemMeta meta = stone.getItemMeta();
-                    if (meta instanceof SkullMeta skullMeta) skull.setPlayerProfile(skullMeta.getPlayerProfile());
+    private void PlaceHead(int row, int column, World world, ItemStack stone){
+        int offset_x = row;
+        if (board.x1 > board.x2) offset_x -= 8;
+        int offset_z = column;
+        if (board.z1 > board.z2) offset_z -= 8;
+        Block block = world.getBlockAt(board.x1 + offset_x, board.y + 1, board.z1 + offset_z);
+        block.setType(stone.getType());
 
-                    // 更新して設置反映
-                    skull.update();
-                }
+        if (stone.getType().equals(Material.PLAYER_HEAD)){
+            // BlockStateとして取得
+            BlockState state = block.getState();
+            if (state instanceof Skull skull) {
+                // アイテムのメタ情報をスカルにコピー（スキンやUUID）
+                ItemMeta meta = stone.getItemMeta();
+                if (meta instanceof SkullMeta skullMeta) skull.setPlayerProfile(skullMeta.getPlayerProfile());
+
+                // 更新して設置反映
+                skull.update();
             }
         }
     }
@@ -321,11 +357,42 @@ public class GameManager {
         String p1_name = "§c§l" + p1_p.getName() + "§r";
         String p2_name = "§9§l" + p2_p.getName() + "§r";
         SendMessage(Config.prefix + "§r§e§lゲーム終了！！");
-        SendMessage(Config.prefix + "§r" + p1_name + ":" + p1_count + "枚");
-        SendMessage(Config.prefix + "§r" + p2_name + ":" + p2_count + "枚");
-        if (p1_count > p2_count) SendMessage(Config.prefix + "§r" + p1_name + "の勝利！");
-        else SendMessage(Config.prefix + "§r" + p2_name + "の勝利！");
-        games.remove(board.name);
+        InitBoard();
+        UpdateBoard();
+        new BukkitRunnable() {
+            int p1_remaining = p1_count;
+            int p2_remaining = p2_count;
+            int placed = 0;
+
+            @Override
+            public void run() {
+                World w = Bukkit.getWorld(board.world);
+                int x = placed % 8;
+                int z = placed / 8;
+                if (p1_remaining > 0){
+                    ItemStack i = firstIs1 ? black_head : white_head;
+                    PlaceHead(x, z, w, i);
+                    p1_remaining--;
+                }
+                if (p2_remaining > 0){
+                    ItemStack i = firstIs1 ? white_head : black_head;
+                    PlaceHead(7 - x, 7 - z, w, i);
+                    p2_remaining--;
+                }
+                p1_p.playSound(p1_p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, SoundCategory.PLAYERS, 1.0f, 2.0f);
+                p2_p.playSound(p2_p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, SoundCategory.PLAYERS, 1.0f, 2.0f);
+                placed++;
+                if (p1_remaining <= 0 && p2_remaining <= 0){
+                    SendMessage(Config.prefix + "§r" + p1_name + ":" + p1_count + "枚");
+                    SendMessage(Config.prefix + "§r" + p2_name + ":" + p2_count + "枚");
+                    if (p1_count > p2_count) SendMessage(Config.prefix + "§r" + p1_name + "の勝利！");
+                    else SendMessage(Config.prefix + "§r" + p2_name + "の勝利！");
+                    games.remove(board.name);
+                    this.cancel();
+                    return;
+                }
+            }
+        }.runTaskTimer(mreversi, 0L, 7L);
     }
 
     public void UpdatePlaceable(){
