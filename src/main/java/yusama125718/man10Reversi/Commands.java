@@ -1,10 +1,15 @@
 package yusama125718.man10Reversi;
 
+import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -26,10 +31,13 @@ public class Commands implements @Nullable CommandExecutor, TabCompleter {
                     sender.sendMessage(Config.prefix + "§r/mreversi board list : リバーシを開始します");
                     sender.sendMessage(Config.prefix + "§r/mreversi start [ボード名] : リバーシを開始します");
                     sender.sendMessage(Config.prefix + "§r/mreversi join [ボード名] : リバーシに参加します");
+                    sender.sendMessage(Config.prefix + "§r/mreversi open : 特殊効果選択画面を開きます※ゲーム中のみ");
+                    sender.sendMessage(Config.prefix + "§r/mreversi abilities : 特殊効果の一覧を開きます");
                     if (sender.hasPermission("mreversi.op")){
                         sender.sendMessage(Config.prefix + "§r=== 管理者コマンド ===");
                         sender.sendMessage(Config.prefix + "§r/mreversi [on/off] : システムを稼働/停止します");
                         sender.sendMessage(Config.prefix + "§r/mreversi board create [名前] : ボードを作成します");
+                        sender.sendMessage(Config.prefix + "§r/mreversi end [ボード名] : ゲームを強制終了します");
                     }
                 }
                 else if (args[0].equals("on") && sender.hasPermission("mreversi.op")){
@@ -40,6 +48,7 @@ public class Commands implements @Nullable CommandExecutor, TabCompleter {
                     Config.system = true;
                     mreversi.getConfig().set("system", Config.system);
                     mreversi.saveConfig();
+                    sender.sendMessage(Config.prefix + "§rONにしました");
                     return true;
                 }
                 else if (args[0].equals("off") && sender.hasPermission("mreversi.op")){
@@ -50,6 +59,43 @@ public class Commands implements @Nullable CommandExecutor, TabCompleter {
                     Config.system = false;
                     mreversi.getConfig().set("system", Config.system);
                     mreversi.saveConfig();
+                    sender.sendMessage(Config.prefix + "§rOFFにしました");
+                    return true;
+                }
+                else if (args[0].equals("open")){
+                    UUID uuid = ((Player) sender).getUniqueId();
+                    GameManager game =  Helper.GetGameForUUID(games.values(), uuid);
+                    if (game == null){
+                        sender.sendMessage(Config.prefix + "§rゲームが見つかりませんでした");
+                        return true;
+                    }
+                    if (game.state != GameManager.GameState.THINKING && game.state != GameManager.GameState.ABILITY){
+                        sender.sendMessage(Config.prefix + "§rゲームが進行中ではありません");
+                        return true;
+                    }
+                    List<Data.Ability> abilities = game.getAbilities(uuid);
+                    Inventory inv = Bukkit.createInventory(null,9, Component.text("[Man10Reversi] 特殊効果選択"));
+                    int i = 0;
+                    for (Data.Ability a: abilities){
+                        inv.setItem(i, Data.getAbilityIcon(a));
+                        i++;
+                    }
+                    ((Player) sender).openInventory(inv);
+                    return true;
+                }
+                else if (args[0].equals("abilities")){
+                    Inventory inv = Bukkit.createInventory(null,36, Component.text("[Man10Reversi] 特殊効果一覧"));
+                    int i = 0;
+                    for (Data.Ability a: Data.ability_details.keySet()){
+                        if (a == Data.Ability.None) continue;
+                        ItemStack item = Data.getAbilityIcon(a);
+                        ItemMeta meta = item.getItemMeta();
+                        meta.lore(Data.ability_details.get(a));
+                        item.setItemMeta(meta);
+                        inv.setItem(i, item);
+                        i++;
+                    }
+                    ((Player) sender).openInventory(inv);
                     return true;
                 }
                 break;
@@ -144,14 +190,14 @@ public class Commands implements @Nullable CommandExecutor, TabCompleter {
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, org.bukkit.command.@NotNull Command command, @NotNull String alias, @NotNull String[] args) {
         if (!sender.hasPermission("mreversi.p")) return List.of();
         if (args.length == 1){
-            if (sender.hasPermission("mreversi.op")) return Arrays.asList("help", "start", "join", "on", "off", "board");
-            else return Arrays.asList("start", "join", "board");
+            if (sender.hasPermission("mreversi.op")) return Arrays.asList("help", "start", "join", "on", "off", "board", "end", "open", "abilities");
+            else return Arrays.asList("start", "join", "board", "open", "abilities");
         }
         else if (args.length == 2){
             if (args[0].equals("start")){
                 return BoardManager.boards.keySet().stream().toList();
             }
-            else if (args[0].equals("join")){
+            else if (args[0].equals("join") || (args[0].equals("end") && sender.hasPermission("mreversi.op"))){
                 return games.keySet().stream().toList();
             }
             else if (args[0].equals("board")){

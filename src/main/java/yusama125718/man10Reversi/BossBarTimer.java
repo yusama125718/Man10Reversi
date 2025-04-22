@@ -22,6 +22,7 @@ public class BossBarTimer {
     private BukkitTask task;
     private GameManager manager;
     private List<Player> targets;
+    private double y_offset;
 
     public BossBarTimer(GameManager m, List<Player> players, BoardManager.Board b, int sec, String Title, List<int[]> Placeable, int[] Last){
         manager = m;
@@ -33,15 +34,17 @@ public class BossBarTimer {
         targets = players;
     }
 
-    public void StartTimer(){
+    public void StartTimer(boolean playsound){
         bossBar = Bukkit.createBossBar(barTitle, BarColor.PURPLE, BarStyle.SOLID);
         bossBar.setProgress(1.0);
         final World world = Bukkit.getWorld(board.world);
         final Particle.DustOptions placeable_color = new Particle.DustOptions(Color.PURPLE, 1.0F);
         for (Player p: targets) {
             bossBar.addPlayer(p);
-            p.playSound(p.getLocation(), Sound.BLOCK_ANVIL_PLACE, SoundCategory.PLAYERS, 1.0f, 1.0f);
+            if (playsound) p.playSound(p.getLocation(), Sound.BLOCK_ANVIL_PLACE, SoundCategory.PLAYERS, 1.0f, 1.0f);
         }
+        if (manager.selectAbility == Data.Ability.BreakShot) y_offset = 1.8;
+        else y_offset = 1.1;
         task = new BukkitRunnable() {
             int timeLeft = seconds;
 
@@ -73,7 +76,7 @@ public class BossBarTimer {
                     if (!placeable.isEmpty()){
                         for (int[] pos: placeable){
                             double x = board.x1 + pos[0] + 0.5;
-                            double y = board.y + 1.1;
+                            double y = board.y + y_offset;
                             double z = board.z1 + pos[1] + 0.5;
                             if (board.x1 > board.x2) x -= 9;
                             if (board.z1 > board.z2) z -= 9;
@@ -87,13 +90,15 @@ public class BossBarTimer {
         }.runTaskTimer(mreversi, 0L, 20L);
     }
 
-    public void Restart(int sec, String Title, List<int[]> Placeable, int[] Last){
+    public void Restart(int sec, String Title, List<int[]> Placeable, int[] Last, boolean playsound){
         seconds = sec;
         barTitle = Title;
         placeable = Placeable;
         lastPlaced = Last;
+        if (manager.selectAbility == Data.Ability.BreakShot) y_offset = 1.8;
+        else y_offset = 1.1;
         StopTimer();
-        StartTimer();
+        StartTimer(playsound);
     }
 
     public void StopTimer(){

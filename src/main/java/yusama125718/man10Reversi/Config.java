@@ -21,6 +21,7 @@ public class Config {
     public static int recruitment_time;
     public static int recruitment_interval;
     public static int max_thinking;
+    public static int max_ability;
 
     public static void LoadConfig(){
         mreversi.saveDefaultConfig();
@@ -32,6 +33,17 @@ public class Config {
         recruitment_time = mreversi.getConfig().getInt("recruitment.time");
         recruitment_interval = mreversi.getConfig().getInt("recruitment.messageInterval");
         max_thinking = mreversi.getConfig().getInt("game.maxThinking");
+        max_ability = mreversi.getConfig().getInt("game.maxAbility");
+        for (Data.Ability a : Data.Ability.values()) {
+            String mate_str = mreversi.getConfig().getString("icons." + a.getLabel() + ".material");
+            Material material = null;
+            if (mate_str != null) {
+                material = Material.getMaterial(mate_str);
+            }
+            if (material == null) material = Material.EMERALD;
+            int cmd = mreversi.getConfig().getInt("icons." + a.getLabel() + ".cmd");
+            Data.icons.put(a.getId(), Helper.CreateItemStack(material, a.getLabel(), cmd));
+        }
         InitFolder();
         LoadBoards();
     }

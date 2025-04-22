@@ -35,7 +35,10 @@ public class GameManager {
     public int[][] grid = new int[8][8];
     public List<int[]> placeable = new ArrayList<>();
     public BossBarTimer timer;
-    public Ability ability;
+    public Data.Ability selectAbility;
+    public List<Data.Ability> p1Abilities = new ArrayList<>();
+    public List<Data.Ability> p2Abilities = new ArrayList<>();
+    public int turn_count = 1;
     // 挟めるか確認する時のオフセット
     private static final List<int[]> search_offsets = List.of(
         new int[]{1, 0},
@@ -47,27 +50,12 @@ public class GameManager {
         new int[]{0, -1},
         new int[]{1, -1}
     );
-    private int p1_color;
-    private int p2_color;
-    private enum Ability{
-        None("効果なし"),
-        Creeper("クリーパー");
-
-        private final String label;
-
-        Ability(String label) {
-            this.label = label;
-        }
-
-        public String getLabel() {
-            return label;
-        }
-    }
 
     public enum GameState{
         RECRUITMENT,
         INITGAME,
-        ONGAME,
+        THINKING,
+        ABILITY,
         GAMEEND
     }
 
@@ -101,6 +89,11 @@ public class GameManager {
                 block.setType(Material.AIR);
             }
         }
+        // 特殊効果抽選
+        for (int i = 1; i <= Config.max_ability; i++){
+            p1Abilities.add(Data.Ability.getRandom());
+            p2Abilities.add(Data.Ability.getRandom());
+        }
         // 盤面初期化
         InitBoard();
         grid[3][3] = 1;
@@ -108,7 +101,7 @@ public class GameManager {
         grid[3][4] = 2;
         grid[4][4] = 1;
         UpdateBoard();
-        ability = Ability.None;
+        selectAbility = Data.Ability.None;
         // メッセージ送信
         Player p1_p = Bukkit.getPlayer(p1);
         Player p2_p = Bukkit.getPlayer(p2);
@@ -123,15 +116,11 @@ public class GameManager {
         if (rand.nextInt(2) == 0) {
             firstIs1 = true;
             turnIs1 = true;
-            p1_color = 1;
-            p2_color = 2;
             first = "§c§l" + p1_p.getName() + "§r";
             second = "§9§l" + p2_p.getName() + "§r";
         } else {
             firstIs1 = false;
             turnIs1 = false;
-            p1_color = 2;
-            p2_color = 1;
             first = "§9§l" + p2_p.getName() + "§r";
             second = "§c§l" + p1_p.getName() + "§r";
         }
@@ -140,13 +129,13 @@ public class GameManager {
             p1_p,
             p2_p
         );
-        timer = new BossBarTimer(this, players, board, Config.max_thinking, first + "のターン", placeable, null);
-        timer.StartTimer();
+        timer = new BossBarTimer(this, players, board, Config.max_thinking + 20, first + "のターン", placeable, null);
+        timer.StartTimer(true);
         SendMessage(Config.prefix + "§r§e§l対戦相手が決まりました");
         SendMessage(Config.prefix + "§r§e§l先手：" + first);
         SendMessage(Config.prefix + "§r§e§l後手：" + second);
         SendMessage(Config.prefix + "§r§f§l" + first + "は石を置いて下さい（地面を左クリックで設置可能）");
-        state = GameState.ONGAME;
+        state = GameState.THINKING;
         return Config.prefix + "§r参加しました";
     }
 
@@ -195,45 +184,144 @@ public class GameManager {
         }
     }
 
-    public void Place(Block b, Player p){
+    public void Place(Block b, Player p) {
         UUID turn;
         if (turnIs1) turn = p1;
         else turn = p2;
         if (turn != p.getUniqueId()) return;
-        int place_color = 1;
-        if ((turnIs1 && !firstIs1) || (!turnIs1 && firstIs1)) place_color = 2;
+        int place_color = (turnIs1 && firstIs1) || (!turnIs1 && !firstIs1) ? 1 : 2;
         // 盤面座標取得
         int x = b.getX() - board.x1;
         int z = b.getZ() - board.z1;
         if (board.x1 > board.x2) x += 8;
         if (board.z1 > board.z2) z += 8;
-        if (grid[x][z] != 0){
-            p.sendMessage(Config.prefix + "§rそこには置けません！");
-            return;
-        }
-        // 返せるコマを取得
-        List<int[]> change_list = new ArrayList<>();
-        for (int[] offset: search_offsets){
-            List<int[]> temp_list = new ArrayList<>();
-            int search_row = x + offset[0];
-            int search_column = z + offset[1];
-            while (0 <= search_row && search_row <= 7 && 0 <= search_column && search_column <= 7 && grid[search_row][search_column] != 0 && grid[search_row][search_column] != place_color){
-                temp_list.add(new int[]{search_row, search_column});
-                search_row += offset[0];
-                search_column += offset[1];
+        switch (selectAbility){
+            case Creeper -> {
+                if (grid[x][z] != 0) {
+                    p.sendMessage(Config.prefix + "§rそこには置けません！");
+                    return;
+                }
+                // 返せるコマを取得
+                List<int[]> change_list = new ArrayList<>();
+                for (int[] offset : search_offsets) {
+                    List<int[]> temp_list = new ArrayList<>();
+                    int search_row = x + offset[0];
+                    int search_column = z + offset[1];
+                    while (0 <= search_row && search_row <= 7 && 0 <= search_column && search_column <= 7 && grid[search_row][search_column] != 0 && grid[search_row][search_column] != place_color) {
+                        temp_list.add(new int[]{search_row, search_column});
+                        search_row += offset[0];
+                        search_column += offset[1];
+                    }
+                    if (0 <= search_row && search_row <= 7 && 0 <= search_column && search_column <= 7 && grid[search_row][search_column] == place_color)
+                        change_list.addAll(temp_list);
+                }
+                if (change_list.isEmpty()) {
+                    p.sendMessage(Config.prefix + "§rそこには置けません！");
+                    return;
+                }
+                // 盤面データを更新
+                for (int[] loc : change_list) grid[loc[0]][loc[1]] = place_color;
+                grid[x][z] = place_color;
+                final List<int[]> creeper_offset = List.of(
+                        new int[]{1, 0},
+                        new int[]{0, 1},
+                        new int[]{-1, 0},
+                        new int[]{0, -1}
+                );
+                for (int[] offset : creeper_offset) grid[x + offset[0]][z + offset[1]] = 0;
             }
-            if (0 <= search_row && search_row <= 7 && 0 <= search_column && search_column <= 7 && grid[search_row][search_column] == place_color) change_list.addAll(temp_list);
+            case OneShot -> {
+                if (grid[x][z] != 0) {
+                    p.sendMessage(Config.prefix + "§rそこには置けません！");
+                    return;
+                }
+                // 返せるコマを取得
+                List<int[]> change_list = new ArrayList<>();
+                for (int[] offset : search_offsets) {
+                    List<int[]> temp_list = new ArrayList<>();
+                    int search_row = x + offset[0];
+                    int search_column = z + offset[1];
+                    while (0 <= search_row && search_row <= 7 && 0 <= search_column && search_column <= 7 && grid[search_row][search_column] != 0 && grid[search_row][search_column] != place_color) {
+                        temp_list.add(new int[]{search_row, search_column});
+                        search_row += offset[0];
+                        search_column += offset[1];
+                    }
+                    if (0 <= search_row && search_row <= 7 && 0 <= search_column && search_column <= 7 && grid[search_row][search_column] == place_color)
+                        change_list.addAll(temp_list);
+                }
+                // 盤面データを更新
+                for (int[] loc : change_list) grid[loc[0]][loc[1]] = place_color;
+                grid[x][z] = place_color;
+            }
+            case BreakShot -> {
+                if (grid[x][z] == 0 || grid[x][z] == place_color) {
+                    p.sendMessage(Config.prefix + "§rそこには置けません！");
+                    return;
+                }
+                grid[x][z] = place_color;
+            }
+            case FakeStone -> {
+                place_color = place_color == 1 ? 2 : 1;
+                if (grid[x][z] != 0) {
+                    p.sendMessage(Config.prefix + "§rそこには置けません！");
+                    return;
+                }
+                // 返せるコマを取得
+                List<int[]> change_list = new ArrayList<>();
+                for (int[] offset : search_offsets) {
+                    List<int[]> temp_list = new ArrayList<>();
+                    int search_row = x + offset[0];
+                    int search_column = z + offset[1];
+                    while (0 <= search_row && search_row <= 7 && 0 <= search_column && search_column <= 7 && grid[search_row][search_column] != 0 && grid[search_row][search_column] != place_color) {
+                        temp_list.add(new int[]{search_row, search_column});
+                        search_row += offset[0];
+                        search_column += offset[1];
+                    }
+                    if (0 <= search_row && search_row <= 7 && 0 <= search_column && search_column <= 7 && grid[search_row][search_column] == place_color)
+                        change_list.addAll(temp_list);
+                }
+                if (change_list.isEmpty()) {
+                    p.sendMessage(Config.prefix + "§rそこには置けません！");
+                    return;
+                }
+                grid[x][z] = place_color;
+            }
+            default -> {
+                if (grid[x][z] != 0) {
+                    p.sendMessage(Config.prefix + "§rそこには置けません！");
+                    return;
+                }
+                // 返せるコマを取得
+                List<int[]> change_list = new ArrayList<>();
+                for (int[] offset : search_offsets) {
+                    List<int[]> temp_list = new ArrayList<>();
+                    int search_row = x + offset[0];
+                    int search_column = z + offset[1];
+                    while (0 <= search_row && search_row <= 7 && 0 <= search_column && search_column <= 7 && grid[search_row][search_column] != 0 && grid[search_row][search_column] != place_color) {
+                        temp_list.add(new int[]{search_row, search_column});
+                        search_row += offset[0];
+                        search_column += offset[1];
+                    }
+                    if (0 <= search_row && search_row <= 7 && 0 <= search_column && search_column <= 7 && grid[search_row][search_column] == place_color)
+                        change_list.addAll(temp_list);
+                }
+                if (change_list.isEmpty()) {
+                    p.sendMessage(Config.prefix + "§rそこには置けません！");
+                    return;
+                }
+                // 盤面データを更新
+                for (int[] loc : change_list) grid[loc[0]][loc[1]] = place_color;
+                grid[x][z] = place_color;
+            }
+
         }
-        if (change_list.isEmpty()) {
-            p.sendMessage(Config.prefix + "§rそこには置けません！");
-            return;
-        }
-        // 盤面データを更新
-        for (int[] loc: change_list) grid[loc[0]][loc[1]] = place_color;
-        grid[x][z] = place_color;
         UpdateCount();
         // 盤面を更新
         UpdateBoard();
+        if (selectAbility != Data.Ability.None) {
+            if (turnIs1) p1Abilities.remove(selectAbility);
+            else p2Abilities.remove(selectAbility);
+        }
         UUID uuid = p1;
         if (turnIs1) uuid = p2;
         Player next_p = Bukkit.getPlayer(uuid);
@@ -262,22 +350,85 @@ public class GameManager {
             GameEnd();
             return;
         }
-        timer.Restart(Config.max_thinking, next_name + "のターン", placeable, new int[]{ x, z });
+        if (selectAbility == Data.Ability.SecondChance) {
+            next_name = current_name;
+            turnIs1 = !turnIs1;
+            SendMessage(Config.prefix + "§r§e§l私のターンは、まだ終わらない！");
+        }
+        if (selectAbility != Data.Ability.None){
+            switch (selectAbility){
+                case Creeper -> {
+                    p.playSound(p.getLocation(), Sound.ENTITY_GENERIC_EXPLODE, SoundCategory.PLAYERS, 1.0f, 1.0f);
+                    next_p.playSound(p.getLocation(), Sound.ENTITY_GENERIC_EXPLODE, SoundCategory.PLAYERS, 1.0f, 1.0f);
+                }
+                case OneShot -> {
+                    p.playSound(p.getLocation(), Sound.BLOCK_ANVIL_PLACE, SoundCategory.PLAYERS, 1.0f, 2.0f);
+                    next_p.playSound(p.getLocation(), Sound.BLOCK_ANVIL_PLACE, SoundCategory.PLAYERS, 1.0f, 2.0f);
+                }
+                case BreakShot -> {
+                    p.playSound(p.getLocation(), Sound.ITEM_TRIDENT_THROW, SoundCategory.PLAYERS, 1.0f, 2.0f);
+                    next_p.playSound(p.getLocation(), Sound.ITEM_TRIDENT_THROW, SoundCategory.PLAYERS, 1.0f, 2.0f);
+                }
+                case FakeStone -> {
+                    p.playSound(p.getLocation(), Sound.ENTITY_WITCH_CELEBRATE, SoundCategory.PLAYERS, 1.0f, 1.0f);
+                    next_p.playSound(p.getLocation(), Sound.ENTITY_WITCH_CELEBRATE, SoundCategory.PLAYERS, 1.0f, 1.0f);
+                }
+                case SecondChance -> {
+                    p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, SoundCategory.PLAYERS, 1.0f, 1.0f);
+                    next_p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, SoundCategory.PLAYERS, 1.0f, 1.0f);
+                }
+            }
+        }
+        selectAbility = Data.Ability.None;
+        timer.Restart(Config.max_thinking, next_name + "のターン", placeable, new int[]{ x, z }, selectAbility == Data.Ability.None);
         SendMessage(Config.prefix + "§r" + next_name + "のターンです。石を置いて下さい（地面を左クリックで設置可能）");
         turnIs1 = !turnIs1;
         UpdatePlaceable();
+        turn_count++;
         if (placeable.isEmpty()){
             SendMessage(Config.prefix + "§r" + next_name + "は置ける場所がないので" + current_name + "にターンが移ります");
             SendMessage(Config.prefix + "§r" + current_name + "のターンです。石を置いて下さい（地面を左クリックで設置可能）");
-            timer.Restart(Config.max_thinking, current_name + "のターン", placeable, new int[]{ x, z });
+            timer.Restart(Config.max_thinking, current_name + "のターン", placeable, new int[]{ x, z }, false);
             turnIs1 = !turnIs1;
             UpdatePlaceable();
             if (placeable.isEmpty()){
-                SendMessage(Config.prefix + "§r" + current_name + "は置ける場所がないのでゲームを終了します");
+                SendMessage(Config.prefix + "§r" + current_name + "も置ける場所がないのでゲームを終了します");
                 GameEnd();
             }
         }
-        ability = Ability.None;
+    }
+    
+    public void SelectAbility(Player p, Data.Ability a){
+        UUID uuid = turnIs1 ? p1 : p2;
+        if (p.getUniqueId() != uuid){
+            p.sendMessage(Config.prefix + "§rあなたのターンではありません");
+            return;
+        }
+        if ((a == Data.Ability.SecondChance || a == Data.Ability.OneShot) && turn_count < 5){
+            p.sendMessage(Config.prefix + "§rこの特殊効果はまだ使えません");
+            return;
+        }
+        Player p1_p = Bukkit.getPlayer(p1);
+        Player p2_p = Bukkit.getPlayer(p2);
+        if (p1_p == null || p2_p == null) {
+            SendMessage(Config.prefix + "§rプレイヤーの取得に失敗したのでゲームを強制終了します");
+            ForceEnd();
+            return;
+        }
+        selectAbility = a;
+        p1_p.playSound(p.getLocation(), Sound.ENCHANT_THORNS_HIT, SoundCategory.PLAYERS, 1.0f, 1.0f);
+        p2_p.playSound(p.getLocation(), Sound.ENCHANT_THORNS_HIT, SoundCategory.PLAYERS, 1.0f, 1.0f);
+        String name = turnIs1 ? "§c§l" + p.getName() + "§r" : "§9§l" + p.getName() + "§r";
+        SendMessage(Config.prefix + "§r" + name + "は" + a.getLabel() + "を発動しました！");
+        UpdatePlaceable();
+        timer.Restart(Config.max_thinking, name + "のターン", placeable, null, false);
+        state = GameState.ABILITY;
+    }
+    
+    public List<Data.Ability> getAbilities(UUID uuid){
+        if (uuid == p1) return p1Abilities;
+        else if (uuid == p2) return p2Abilities;
+        else return null;
     }
 
     public void UpdateCount(){
@@ -396,28 +547,48 @@ public class GameManager {
     }
 
     public void UpdatePlaceable(){
-        int place_color = 1;
+        int place_color = (turnIs1 && firstIs1) || (!turnIs1 && !firstIs1) ? 1 : 2;
         placeable.clear();
-        if ((turnIs1 && !firstIs1) || (!turnIs1 && firstIs1)) place_color = 2;
-        for (int row = 0; row < 8; row++) {
-            for (int column = 0; column < 8; column++) {
-                if (grid[row][column] != 0) continue;
-                for (int[] offset: search_offsets) {
-                    List<int[]> temp_list = new ArrayList<>();
-                    int search_row = row + offset[0];
-                    int search_column = column + offset[1];
-                    while (0 <= search_row && search_row <= 7 && 0 <= search_column && search_column <= 7 && grid[search_row][search_column] != 0 && grid[search_row][search_column] != place_color) {
-                        temp_list.add(new int[]{search_row, search_column});
-                        search_row += offset[0];
-                        search_column += offset[1];
+        if (selectAbility == Data.Ability.FakeStone) place_color = place_color == 1 ? 2 : 1;
+        switch (selectAbility){
+            case OneShot -> {
+                for (int row = 0; row < 8; row++) {
+                    for (int column = 0; column < 8; column++) {
+                        if (grid[row][column] == 0) placeable.add(new int[]{row, column});
                     }
-                    if (!temp_list.isEmpty() && 0 <= search_row && search_row <= 7 && 0 <= search_column && search_column <= 7 && grid[search_row][search_column] == place_color) {
-                        placeable.add(new int[]{row, column});
-                        break;
+                }
+            }
+            case BreakShot -> {
+                int enemy = place_color == 1 ? 2 : 1;
+                for (int row = 0; row < 8; row++) {
+                    for (int column = 0; column < 8; column++) {
+                        if (grid[row][column] == enemy) placeable.add(new int[]{row, column});
+                    }
+                }
+            }
+            default -> {
+                for (int row = 0; row < 8; row++) {
+                    for (int column = 0; column < 8; column++) {
+                        if (grid[row][column] != 0) continue;
+                        for (int[] offset: search_offsets) {
+                            List<int[]> temp_list = new ArrayList<>();
+                            int search_row = row + offset[0];
+                            int search_column = column + offset[1];
+                            while (0 <= search_row && search_row <= 7 && 0 <= search_column && search_column <= 7 && grid[search_row][search_column] != 0 && grid[search_row][search_column] != place_color) {
+                                temp_list.add(new int[]{search_row, search_column});
+                                search_row += offset[0];
+                                search_column += offset[1];
+                            }
+                            if (!temp_list.isEmpty() && 0 <= search_row && search_row <= 7 && 0 <= search_column && search_column <= 7 && grid[search_row][search_column] == place_color) {
+                                placeable.add(new int[]{row, column});
+                                break;
+                            }
+                        }
                     }
                 }
             }
         }
+
     }
 
     public void ForcePlace(){

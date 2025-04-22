@@ -1,11 +1,15 @@
 package yusama125718.man10Reversi;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.TextComponent;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockDamageEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.plugin.Plugin;
 
 import static yusama125718.man10Reversi.Man10Reversi.games;
@@ -25,7 +29,7 @@ public class Events implements Listener {
         }
         else if (!games.isEmpty()){
             GameManager g = Helper.GetGameForUUID(games.values(), e.getPlayer().getUniqueId());
-            if (g != null && g.state == GameManager.GameState.ONGAME && Helper.BlockInBoard(e.getBlock(), g.board)){
+            if (g != null && (g.state == GameManager.GameState.THINKING || g.state == GameManager.GameState.ABILITY) && Helper.BlockInBoard(e.getBlock(), g.board)){
                 g.Place(e.getBlock(), e.getPlayer());
                 e.setCancelled(true);
             }
@@ -51,6 +55,40 @@ public class Events implements Listener {
                 e.getPlayer().sendMessage(Component.text(Config.prefix + "§rゲーム中のボード内にはブロックを設置できません"));
                 e.setCancelled(true);
             }
+        }
+    }
+
+    @EventHandler
+    public void InventoryClick(InventoryClickEvent e){
+        if (e.getView().title().equals(Component.text("[Man10Reversi] 特殊効果選択"))){
+            e.setCancelled(true);
+            GameManager g = Helper.GetGameForUUID(games.values(), e.getWhoClicked().getUniqueId());
+            if (g == null){
+                e.getWhoClicked().sendMessage(Config.prefix + "§r参加中のゲームが見つかりません");
+                e.getWhoClicked().closeInventory();
+                return;
+            }
+            if (g.state == GameManager.GameState.THINKING){
+                if (e.getCurrentItem() == null) return;
+                e.getWhoClicked().closeInventory();
+                String item_name = "";
+                if (e.getCurrentItem().getItemMeta().hasDisplayName()) {
+                    item_name = LegacyComponentSerializer.legacySection().serialize(e.getCurrentItem().getItemMeta().displayName());
+                }
+                Data.Ability ability = Data.Ability.fromLabel(item_name);
+                if (ability == null){
+                    e.getWhoClicked().sendMessage(Config.prefix + "§r特殊効果が見つかりませんでした");
+                    return;
+                }
+                g.SelectAbility((Player) e.getWhoClicked(), ability);
+            }
+            else {
+                e.getWhoClicked().closeInventory();
+                e.getWhoClicked().sendMessage(Config.prefix + "§r現在は選択できません");
+            }
+        }
+        else if (e.getView().title().equals(Component.text("[Man10Reversi] 特殊効果一覧"))){
+            e.setCancelled(true);
         }
     }
 }

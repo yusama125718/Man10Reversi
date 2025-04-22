@@ -13,3 +13,4 @@ recruitment:
   messageInterval: 20
 game:
   maxThinking: 30
+  maxAbility: 4
