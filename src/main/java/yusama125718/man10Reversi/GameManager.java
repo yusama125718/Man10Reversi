@@ -228,7 +228,13 @@ public class GameManager {
                         new int[]{-1, 0},
                         new int[]{0, -1}
                 );
-                for (int[] offset : creeper_offset) grid[x + offset[0]][z + offset[1]] = 0;
+                for (int[] offset : creeper_offset) {
+                    int x_remove = x + offset[0];
+                    int z_remove = z + offset[1];
+                    // 盤外の場合消さない
+                    if (0 > x_remove || x_remove > 7 || 0 > z_remove || z_remove > 7) continue;
+                    grid[x_remove][z_remove] = 0;
+                }
             }
             case OneShot -> {
                 if (grid[x][z] != 0) {
@@ -337,6 +343,10 @@ public class GameManager {
             next_name = "§c§l" + next_p.getName() + "§r";
         }
         SendMessage(Config.prefix + "§r" + current_name + "がX:" + x + ", Z:" + z + "に配置しました");
+        if (p1_count == 0 || p2_count == 0 || p1_count + p2_count == 64){
+            GameEnd();
+            return;
+        }
         SendMessage(Config.prefix + "§r§f§l現在の状況は以下の通りです");
         if (turnIs1){
             SendMessage(Config.prefix + "§r" + current_name + ":" + p1_count + "枚");
@@ -345,10 +355,6 @@ public class GameManager {
         else {
             SendMessage(Config.prefix + "§r" + next_name + ":" + p1_count + "枚");
             SendMessage(Config.prefix + "§r" + current_name + ":" + p2_count + "枚");
-        }
-        if (p1_count == 0 || p2_count == 0 || p1_count + p2_count == 64){
-            GameEnd();
-            return;
         }
         if (selectAbility == Data.Ability.SecondChance) {
             next_name = current_name;
@@ -384,14 +390,15 @@ public class GameManager {
         SendMessage(Config.prefix + "§r" + next_name + "のターンです。石を置いて下さい（地面を左クリックで設置可能）");
         turnIs1 = !turnIs1;
         UpdatePlaceable();
+        state = GameState.THINKING;
         turn_count++;
-        if (placeable.isEmpty()){
+        if (placeable.isEmpty()) {
             SendMessage(Config.prefix + "§r" + next_name + "は置ける場所がないので" + current_name + "にターンが移ります");
             SendMessage(Config.prefix + "§r" + current_name + "のターンです。石を置いて下さい（地面を左クリックで設置可能）");
-            timer.Restart(Config.max_thinking, current_name + "のターン", placeable, new int[]{ x, z }, false);
+            timer.Restart(Config.max_thinking, current_name + "のターン", placeable, new int[]{x, z}, false);
             turnIs1 = !turnIs1;
             UpdatePlaceable();
-            if (placeable.isEmpty()){
+            if (placeable.isEmpty()) {
                 SendMessage(Config.prefix + "§r" + current_name + "も置ける場所がないのでゲームを終了します");
                 GameEnd();
             }
@@ -537,7 +544,8 @@ public class GameManager {
                     SendMessage(Config.prefix + "§r" + p1_name + ":" + p1_count + "枚");
                     SendMessage(Config.prefix + "§r" + p2_name + ":" + p2_count + "枚");
                     if (p1_count > p2_count) SendMessage(Config.prefix + "§r" + p1_name + "の勝利！");
-                    else SendMessage(Config.prefix + "§r" + p2_name + "の勝利！");
+                    else if (p1_count < p2_count) SendMessage(Config.prefix + "§r" + p2_name + "の勝利！");
+                    else SendMessage(Config.prefix + "§r引き分け！");
                     games.remove(board.name);
                     this.cancel();
                     return;
